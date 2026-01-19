@@ -1,16 +1,27 @@
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import field_validator
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "Inventario API"
     VERSION: str = "1.0.0"
     
-    # Por defecto usamos SQLite para pruebas locales.
-    # Cuando vayamos a producción (Render), esto se leerá automáticamente de las variables de entorno.
-    DATABASE_URL: str = "sqlite:///database.db"
+    # Usamos ./database.db para ser explícitos con la ruta local
+    DATABASE_URL: str = "sqlite:///./database.db"
 
-    class Config:
-        # Esto le dice a Pydantic que busque un archivo .env (estilo Laravel)
-        env_file = ".env"
-        case_sensitive = True
+    # Configuración moderna para Pydantic v2
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        case_sensitive=True,
+        extra="ignore" # Ignora variables extra en el .env que no usemos
+    )
+
+    # --- AUTO-CORRECCIÓN DE URL ---
+    # Esto detecta si la URL viene de Neon como 'postgres://' y la cambia a 'postgresql://'
+    # Así te ahorras editarla manualmente en Render.
+    @field_validator("DATABASE_URL", mode="before")
+    def corregir_url_postgres(cls, v: str):
+        if v and v.startswith("postgres://"):
+            return v.replace("postgres://", "postgresql://", 1)
+        return v
 
 settings = Settings()
