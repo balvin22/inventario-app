@@ -5,19 +5,17 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "Inventario API"
     VERSION: str = "1.0.0"
     
-    # Usamos ./database.db para ser explícitos con la ruta local
+    # Esta línea es la clave: 
+    # Busca la variable DATABASE_URL en el sistema (Render). 
+    # Si no la encuentra, usa sqlite (Local).
     DATABASE_URL: str = "sqlite:///./database.db"
 
-    # Configuración moderna para Pydantic v2
     model_config = SettingsConfigDict(
         env_file=".env",
         case_sensitive=True,
-        extra="ignore" # Ignora variables extra en el .env que no usemos
+        extra="ignore"
     )
 
-    # --- AUTO-CORRECCIÓN DE URL ---
-    # Esto detecta si la URL viene de Neon como 'postgres://' y la cambia a 'postgresql://'
-    # Así te ahorras editarla manualmente en Render.
     @field_validator("DATABASE_URL", mode="before")
     def corregir_url_postgres(cls, v: str):
         if v and v.startswith("postgres://"):
