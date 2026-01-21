@@ -7,7 +7,7 @@ from datetime import datetime
 class CategoriaProducto(str, Enum):
     GRANO = "grano"
     GALERIA = "galeria"
-    ASEO = "ASEO"
+    ASEO = "aseo"
 
 class TipoMovimiento(str, Enum):
     ENTRADA = "entrada"
