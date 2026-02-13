@@ -1,35 +1,55 @@
 from sqlmodel import SQLModel
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from app.models.inventory import CategoriaProducto, TipoMovimiento, TipoDestino
+import math
 
 # --- MOVIMIENTOS ---
+
 class MovimientoCreate(SQLModel):
+    fecha: Optional[datetime] = None
     producto_id: int
     cantidad: float
-    tipo: TipoMovimiento      # "entrada" o "salida"
+    tipo: TipoMovimiento
     periodo_id: int
-    semana_id: Optional[int] = None # Opcional (depende si es Grano o Galeria)
-    
-    # Solo para Salidas
-    destino_tipo: Optional[TipoDestino] = None # "ruta" o "tercero"
+    semana_id: Optional[int] = None
+    destino_tipo: Optional[TipoDestino] = None
+    ruta_nombre: Optional[str] = None
+    nota_terceros: Optional[str] = None
+
+class MovimientoUpdate(SQLModel):
+    fecha: Optional[datetime] = None
+    producto_id: Optional[int] = None
+    cantidad: Optional[float] = None
+    tipo: Optional[TipoMovimiento] = None
+    periodo_id: Optional[int] = None
+    semana_id: Optional[int] = None
+    destino_tipo: Optional[TipoDestino] = None
     ruta_nombre: Optional[str] = None
     nota_terceros: Optional[str] = None
 
 class MovimientoRead(MovimientoCreate):
     id: int
     fecha: datetime
-    # Aquí podríamos agregar nombre_producto si quisiéramos devolverlo formateado
+    # Opcional: Agregar nombre del producto para evitar joins extras en frontend
+    # producto_nombre: Optional[str] = None 
+
+# --- NUEVO: SCHEMA DE PAGINACIÓN ---
+# Esto es lo que devolveremos al frontend
+class MovimientoPaginated(SQLModel):
+    data: List[MovimientoRead]
+    total: int
+    page: int
+    limit: int
+    total_pages: int
 
 # --- PERIODOS ---
-# Lo que el usuario envía para CREAR un periodo
 class PeriodoCreate(SQLModel):
     nombre: str
     fecha_inicio: datetime
     fecha_fin: datetime
     activo: bool = True
 
-# Lo que la API responde (incluye el ID)
 class PeriodoRead(PeriodoCreate):
     id: int
 
@@ -52,10 +72,19 @@ class ProductoCreate(SQLModel):
 class ProductoRead(ProductoCreate):
     id: int
 
+# --- RUTAS ---
 class RutaCreate(SQLModel):
     nombre: str
     descripcion: Optional[str] = None
 
 class RutaRead(RutaCreate):
     id: int
-    activa: bool    
+    activa: bool
+    
+class StockItem(SQLModel):
+    producto_id: int
+    nombre: str
+    categoria: str
+    total_entradas: float
+    total_salidas: float
+    stock_actual: float

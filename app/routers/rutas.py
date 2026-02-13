@@ -18,8 +18,6 @@ def crear_ruta(ruta: RutaCreate, session: Session = Depends(get_session)):
     session.refresh(db_ruta)
     return db_ruta
 
-# --- NUEVOS ENDPOINTS ---
-
 @router.put("/{ruta_id}", response_model=RutaRead)
 def actualizar_ruta(ruta_id: int, ruta_data: RutaCreate, session: Session = Depends(get_session)):
     db_ruta = session.get(Ruta, ruta_id)
@@ -41,8 +39,8 @@ def eliminar_ruta(ruta_id: int, session: Session = Depends(get_session)):
     if not db_ruta:
         raise HTTPException(status_code=404, detail="Ruta no encontrada")
     
-    # Soft delete (Desactivar en lugar de borrar para no romper historial)
+    # Soft delete
     db_ruta.activa = False 
     session.add(db_ruta)
     session.commit()
-    return {"mensaje": "Ruta eliminada"}
+    return {"mensaje": "Ruta eliminada (Soft Delete)"}

@@ -1,15 +1,49 @@
 from fastapi import APIRouter, Depends, HTTPException
-from sqlmodel import Session, select
+from sqlmodel import Session, select, func
 from app.db.session import get_session
-from app.models.inventory import Producto
+from app.core.pagination import paginate, Page, PaginationParams
+from typing import Optional
+from app.models.inventory import Producto, CategoriaProducto
 from app.schemas.inventory import ProductoCreate, ProductoRead
 
 router = APIRouter(prefix="/productos", tags=["Productos"])
 
 # 1. LISTAR (GET)
-@router.get("/", response_model=list[ProductoRead])
-def listar_productos(session: Session = Depends(get_session)):
-    return session.exec(select(Producto)).all()
+@router.get("/", response_model=Page[ProductoRead])
+def listar_productos(
+    session: Session = Depends(get_session),
+    pagination: PaginationParams = Depends(),
+    search: Optional[str] = None,
+    categoria: Optional[CategoriaProducto] = None # <--- Recibimos el parámetro
+):
+    query = select(Producto)
+    
+    # 1. Filtro por buscador
+    if search:
+        query = query.where(Producto.nombre.ilike(f"%{search}%"))
+        
+    # 2. CORRECCIÓN: Filtro por categoría (Faltaba esto)
+    if categoria:
+        query = query.where(Producto.categoria == categoria)
+        
+    return paginate(session, query, pagination)
+
+@router.get("/stats")
+def obtener_estadisticas(session: Session = Depends(get_session)):
+    # count(1) es muy rápido en SQL
+    total = session.exec(select(func.count(Producto.id))).one()
+    
+    # Contamos por categoría
+    grano = session.exec(select(func.count(Producto.id)).where(Producto.categoria == CategoriaProducto.GRANO)).one()
+    galeria = session.exec(select(func.count(Producto.id)).where(Producto.categoria == CategoriaProducto.GALERIA)).one()
+    aseo = session.exec(select(func.count(Producto.id)).where(Producto.categoria == CategoriaProducto.ASEO)).one()
+    
+    return {
+        "all": total,
+        "grano": grano,
+        "galeria": galeria,
+        "aseo": aseo
+    }
 
 # 2. CREAR (POST)
 @router.post("/", response_model=ProductoRead)
