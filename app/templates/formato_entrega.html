@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Acta de Entrega de Cantidades</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 40px;
+            color: #333;
+            max-width: 800px;
+            margin: auto;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 2px solid #333;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+        }
+        h1 {
+            margin: 0;
+            font-size: 24px;
+            text-transform: uppercase;
+        }
+        .meta-info {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            font-size: 14px;
+        }
+        .section-title {
+            background-color: #f0f0f0;
+            padding: 5px 10px;
+            font-weight: bold;
+            border: 1px solid #ccc;
+            margin-top: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 10px;
+            font-size: 12px;
+        }
+        th, td {
+            border: 1px solid #000;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #e6e6e6;
+            text-align: center;
+        }
+        td.center {
+            text-align: center;
+        }
+        .signatures {
+            margin-top: 60px;
+            display: flex;
+            justify-content: space-between;
+        }
+        .sig-block {
+            width: 45%;
+            border-top: 1px solid #000;
+            padding-top: 10px;
+            text-align: center;
+            font-size: 14px;
+        }
+        /* Estilos para impresión */
+        @media print {
+            body { padding: 0; }
+            .section-title { background-color: #ddd !important; -webkit-print-color-adjust: exact; }
+            th { background-color: #ccc !important; -webkit-print-color-adjust: exact; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <h1>Acta de Entrega y Recepción</h1>
+        <p>Control de Entrada y Salida de Alimentos</p>
+    </div>
+
+    <div class="meta-info">
+        <div><strong>Fecha:</strong> {{ date }}</div>
+        <div><strong>Folio:</strong> {{ folio_id }}</div>
+    </div>
+    <div class="meta-info">
+        <div><strong>Periodo:</strong> {{ project_name }}</div>
+    </div>
+
+    <div class="section-title">1. INFORMACIÓN DE RESPONSABLES</div>
+    <table>
+        <tr>
+            <th width="50%">ENTREGA (Quien suministra)</th>
+            <th width="50%">RECIBE (Quien valida)</th>
+        </tr>
+        <tr>
+            <td height="50">
+                <strong>Nombre:</strong> {{ responsable_entrega_nombre }}<br><br>
+                <strong>Cargo:</strong> {{ responsable_entrega_cargo }}
+            </td>
+            <td>
+                <strong>Nombre:</strong> {{ responsable_recibe_nombre }}<br><br>
+                <strong>Cargo:</strong> {{ responsable_recibe_cargo }}
+            </td>
+        </tr>
+    </table>
+
+    <div class="section-title">2. DETALLE DE CANTIDADES</div>
+    <table>
+        <thead>
+            <tr>
+                <th width="10%">Cód/Ref</th>
+                <th width="35%">Descripción del Elemento</th>
+                <th width="15%">Cantidad Total</th>
+                <th width="40%">Observación / Desglose</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in items %}
+            <tr>
+                <td class="center">{{ item['ref'] }}</td>
+                <td>{{ item['description'] }}</td>
+                <td class="center"><strong>{{ item['quantity'] }}</strong></td>
+                <td>{{ item['status'] }}</td>
+            </tr>
+            {% endfor %}
+            
+            {% if not items %}
+            <tr>
+                <td colspan="4" class="center">No hay ítems registrados en esta entrega.</td>
+            </tr>
+            {% endif %}
+        </tbody>
+    </table>
+
+    <div class="section-title">3. OBSERVACIONES GENERALES</div>
+    <div style="border: 1px solid #000; height: 60px; padding: 10px; margin-top: 5px; font-size: 12px;">
+        </div>
+
+    <div class="signatures">
+        <div class="sig-block">
+            <strong>FIRMA DE QUIEN ENTREGA</strong>
+            <br><br><br>
+            C.C. _______________________
+        </div>
+        <div class="sig-block">
+            <strong>FIRMA DE QUIEN RECIBE</strong>
+            <br><br><br>
+            C.C. _______________________
+        </div>
+    </div>
+
+    <p style="font-size: 10px; text-align: center; margin-top: 40px;">
+        Este documento certifica la veracidad de las cantidades físicas reportadas por el sistema con Folio #{{ folio_id }}.
+    </p>
+
+</body>
+</html>
