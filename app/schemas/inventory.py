@@ -88,3 +88,4 @@ class StockItem(SQLModel):
     total_entradas: float
     total_salidas: float
     stock_actual: float
+    total_terceros: float = 0

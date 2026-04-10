@@ -62,20 +62,29 @@ def reporte_inventario_paginado(
             Movimiento.tipo == TipoMovimiento.ENTRADA
         )).one() or 0
         
-        salidas = session.exec(select(func.sum(Movimiento.cantidad)).where(
+        salidas_rutas = session.exec(select(func.sum(Movimiento.cantidad)).where(
             Movimiento.producto_id == prod.id,
-            Movimiento.tipo == TipoMovimiento.SALIDA
+            Movimiento.tipo == TipoMovimiento.SALIDA,
+            Movimiento.destino_tipo == TipoDestino.RUTA
         )).one() or 0
         
-        stock = entradas - salidas
+        salidas_terceros = session.exec(select(func.sum(Movimiento.cantidad)).where(
+            Movimiento.producto_id == prod.id,
+            Movimiento.tipo == TipoMovimiento.SALIDA,
+            Movimiento.destino_tipo == TipoDestino.TERCERO
+        )).one() or 0
+        
+        total_salidas = salidas_rutas + salidas_terceros
+        stock = entradas - total_salidas
         
         reporte_data.append(StockItem(
             producto_id=prod.id,
             nombre=prod.nombre,
             categoria=prod.categoria,
             total_entradas=entradas,
-            total_salidas=salidas,
-            stock_actual=stock
+            total_salidas=salidas_rutas,
+            stock_actual=stock,
+            total_terceros=salidas_terceros
         ))
         
     # D. Retornar estructura Page
@@ -220,6 +229,49 @@ def reporte_matrix_semanal(
     # A. Obtener Headers (Semanas)
     semanas = session.exec(select(Semana).where(Semana.periodo_id == periodo_id).order_by(Semana.numero)).all()
     
+    # --- DATOS COMPLETOS DE RUTAS Y TERCEROS (SIN PAGINACIÓN) ---
+    todas_rutas = {}
+    todos_terceros = {}
+    
+    # Mapear semana_id a numero de semana
+    semana_id_a_numero = {s.id: s.numero for s in semanas}
+    primera_semana = semanas[0].numero if semanas else 1
+    
+    movs_periodo_todos = session.exec(select(Movimiento).where(
+        Movimiento.periodo_id == periodo_id,
+        Movimiento.tipo == TipoMovimiento.SALIDA
+    )).all()
+    
+    for m in movs_periodo_todos:
+        prod = session.get(Producto, m.producto_id)
+        nombre_prod = prod.nombre if prod else 'Desconocido'
+        cat_prod = prod.categoria if prod else 'desconocido'
+        
+        # Determinar semana: si tiene semana_id usar esa, sino semana 1
+        num_semana = semana_id_a_numero.get(m.semana_id, primera_semana) if m.semana_id else primera_semana
+        
+        if m.destino_tipo == TipoDestino.RUTA and m.ruta_nombre:
+            if m.ruta_nombre not in todas_rutas:
+                todas_rutas[m.ruta_nombre] = {}
+            if num_semana not in todas_rutas[m.ruta_nombre]:
+                todas_rutas[m.ruta_nombre][num_semana] = []
+            todas_rutas[m.ruta_nombre][num_semana].append({
+                "producto": nombre_prod,
+                "categoria": cat_prod,
+                "cantidad": m.cantidad
+            })
+        elif m.destino_tipo == TipoDestino.TERCERO and m.nota_terceros:
+            if m.nota_terceros not in todos_terceros:
+                todos_terceros[m.nota_terceros] = {}
+            if num_semana not in todos_terceros[m.nota_terceros]:
+                todos_terceros[m.nota_terceros][num_semana] = []
+            todos_terceros[m.nota_terceros][num_semana].append({
+                "producto": nombre_prod,
+                "categoria": cat_prod,
+                "cantidad": m.cantidad
+            })
+    # -----------------------------------------------------------
+    
     # B. Paginar Productos
     query_prod = select(Producto)
     total_count = session.exec(select(func.count()).select_from(query_prod.subquery())).one()
@@ -231,13 +283,32 @@ def reporte_matrix_semanal(
     # C. Construir Data
     matrix = []
     
+    # Obtener todas las rutas únicas del periodo para el header
+    rutas_periodo = session.exec(
+        select(Movimiento.ruta_nombre).where(
+            Movimiento.periodo_id == periodo_id,
+            Movimiento.destino_tipo == TipoDestino.RUTA,
+            Movimiento.ruta_nombre.isnot(None)
+        ).distinct()
+    ).all()
+    
+    terceros_periodo = session.exec(
+        select(Movimiento.nota_terceros).where(
+            Movimiento.periodo_id == periodo_id,
+            Movimiento.destino_tipo == TipoDestino.TERCERO,
+            Movimiento.nota_terceros.isnot(None)
+        ).distinct()
+    ).all()
+    
     for prod in productos_pagina:
         fila = {
             "producto_id": prod.id,
             "nombre": prod.nombre,
             "categoria": prod.categoria,
             "semanas": {},
-            "resumen": {"entradas": 0, "salidas": 0, "balance": 0}
+            "resumen": {"entradas": 0, "salidas": 0, "balance": 0},
+            "rutas": {},
+            "terceros": {}
         }
         
         movs_periodo = session.exec(select(Movimiento).where(
@@ -249,30 +320,51 @@ def reporte_matrix_semanal(
         t_out = sum(m.cantidad for m in movs_periodo if m.tipo == TipoMovimiento.SALIDA)
         fila["resumen"] = { "entradas": t_in, "salidas": t_out, "balance": t_in - t_out }
 
-        primera_sem_id = semanas[0].id if semanas else None
-        
-        for sem in semanas:
-            if prod.categoria == 'grano':
-                movs_semana = movs_periodo if sem.id == primera_sem_id else []
-            else:
-                movs_semana = [m for m in movs_periodo if m.semana_id == sem.id]
-
-            val_in = sum(m.cantidad for m in movs_semana if m.tipo == TipoMovimiento.ENTRADA)
-            val_out = sum(m.cantidad for m in movs_semana if m.tipo == TipoMovimiento.SALIDA)
+        # Si hay semanas, distribuir por semana
+        if semanas:
+            primera_sem_id = semanas[0].id
             
-            detalles_rutas = {} 
-            for m in movs_semana:
-                if m.tipo == TipoMovimiento.SALIDA:
-                    nombre = m.ruta_nombre if m.destino_tipo == TipoDestino.RUTA else (f"Terceros: {m.nota_terceros}" if m.nota_terceros else "Terceros") or "Sin ruta"
-                    detalles_rutas[nombre] = detalles_rutas.get(nombre, 0) + m.cantidad
+            for sem in semanas:
+                # Granos: pueden tener semana_id=NULL o algún número
+                # Si tiene semana_id = NULL, va a la primera semana
+                # Si tiene semana_id = X, va a esa semana
+                if prod.categoria == 'grano':
+                    movs_semana = [m for m in movs_periodo if m.semana_id is None or m.semana_id == sem.id]
+                else:
+                    # Galeria/Aseo: tienen semana_id específica
+                    movs_semana = [m for m in movs_periodo if m.semana_id == sem.id]
 
-            fila["semanas"][sem.numero] = { "entradas": val_in, "salidas": val_out, "rutas": detalles_rutas }
+                val_in = sum(m.cantidad for m in movs_semana if m.tipo == TipoMovimiento.ENTRADA)
+                val_out = sum(m.cantidad for m in movs_semana if m.tipo == TipoMovimiento.SALIDA)
+                
+                detalles_rutas = {} 
+                detalles_terceros = {}
+                for m in movs_semana:
+                    if m.tipo == TipoMovimiento.SALIDA:
+                        if m.destino_tipo == TipoDestino.RUTA and m.ruta_nombre:
+                            detalles_rutas[m.ruta_nombre] = detalles_rutas.get(m.ruta_nombre, 0) + m.cantidad
+                        elif m.destino_tipo == TipoDestino.TERCERO and m.nota_terceros:
+                            detalles_terceros[m.nota_terceros] = detalles_terceros.get(m.nota_terceros, 0) + m.cantidad
+
+                fila["semanas"][sem.numero] = { "entradas": val_in, "salidas": val_out, "rutas": detalles_rutas, "terceros": detalles_terceros }
+        
+        # Siempre calcular rutas y terceros directamente del periodo (para cuando no hay semanas O para completar datos)
+        for m in movs_periodo:
+            if m.tipo == TipoMovimiento.SALIDA:
+                if m.destino_tipo == TipoDestino.RUTA and m.ruta_nombre:
+                    fila["rutas"][m.ruta_nombre] = fila["rutas"].get(m.ruta_nombre, 0) + m.cantidad
+                elif m.destino_tipo == TipoDestino.TERCERO and m.nota_terceros:
+                    fila["terceros"][m.nota_terceros] = fila["terceros"].get(m.nota_terceros, 0) + m.cantidad
             
         matrix.append(fila)
-            
+        
     return {
-        "semanas_header": [s.numero for s in semanas],
+        "semanas_header": [s.numero for s in semanas] if semanas else [],
+        "rutas_header": [r for r in rutas_periodo if r],
+        "terceros_header": [t for t in terceros_periodo if t],
         "data": matrix,
+        "rutas_completas": todas_rutas,
+        "terceros_completos": todos_terceros,
         "pagination": {
             "total": total_count,
             "page": page,

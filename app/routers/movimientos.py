@@ -55,7 +55,8 @@ def listar_movimientos(
     tipo: Optional[TipoMovimiento] = None,
     periodo_id: Optional[int] = None,
     semana_id: Optional[int] = None,
-    ruta_nombre: Optional[str] = None
+    ruta_nombre: Optional[str] = None,
+    destino_tipo: Optional[TipoDestino] = None
 ):
     # A. Construir la Query Base (con Join para buscar por nombre de producto)
     query = select(Movimiento).join(Producto)
@@ -71,6 +72,8 @@ def listar_movimientos(
         query = query.where(Movimiento.semana_id == semana_id)
     if ruta_nombre and ruta_nombre != 'todos':
         query = query.where(Movimiento.ruta_nombre == ruta_nombre)
+    if destino_tipo:
+        query = query.where(Movimiento.destino_tipo == destino_tipo)
 
     # C. Ordenar (Más reciente primero)
     query = query.order_by(desc(Movimiento.fecha))
